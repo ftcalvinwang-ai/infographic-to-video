@@ -58,15 +58,17 @@ def generate_tts(slides, voice, tmp_dir, speed=1.0):
             Path(txt_file).write_text(narration, encoding="utf-8")
             raw_mp3 = prefix + "_raw.mp3" if speed != 1.0 else mp3
             cmd = f'python3 -m edge_tts --voice "{voice}" -f "{txt_file}" --write-media "{raw_mp3}" --write-subtitles "{srt}"'
-            # Retry up to 3 times (edge-tts can fail transiently)
-            for attempt in range(3):
+            # Retry up to 5 times with increasing delays (edge-tts rate limiting)
+            for attempt in range(5):
                 r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 if r.returncode == 0:
                     break
-                if attempt < 2:
-                    time.sleep(2)
+                if attempt < 4:
+                    delay = (attempt + 1) * 3
+                    info(f"    Retry {attempt+1}/4 for slide {i+1} (waiting {delay}s)...")
+                    time.sleep(delay)
             else:
-                err(f"TTS failed for slide {i+1} after 3 attempts:\n{r.stderr.strip()}")
+                err(f"TTS failed for slide {i+1} after 5 attempts:\n{r.stderr.strip()}")
                 sys.exit(1)
             # Speed up audio with ffmpeg atempo if needed
             if speed != 1.0:
@@ -350,18 +352,18 @@ def build_subtitle_frames(pngs, tts_results, padding, tmp_dir, font_size, no_sub
             offset = slide_end
             continue
 
-        # Get cues for this slide
-        slide_cues = [(s, e, t) for s, e, t, si in all_cues if si == i]
+        # Get cues for this slide, converted to LOCAL timestamps (relative to slide start)
+        local_cues = [(s - slide_start, e - slide_start, t) for s, e, t, si in all_cues if si == i]
 
-        if not slide_cues:
+        if not local_cues:
             concat_entries.append((png, res["duration"] + padding))
             offset = slide_end
             continue
 
         # Build time segments within this slide
         boundaries = sorted(set(
-            [0.0] + [c[0] - slide_start for c in slide_cues] +
-            [c[1] - slide_start for c in slide_cues] +
+            [0.0] + [c[0] for c in local_cues] +
+            [c[1] for c in local_cues] +
             [res["duration"] + padding]
         ))
 
@@ -372,8 +374,8 @@ def build_subtitle_frames(pngs, tts_results, padding, tmp_dir, font_size, no_sub
             if seg_dur < 0.01:
                 continue
 
-            abs_mid = slide_start + (seg_start + seg_end) / 2
-            active = next((t for s, e, t in slide_cues if s <= abs_mid - slide_start + 0.01 and abs_mid - slide_start - 0.01 < e), None)
+            local_mid = (seg_start + seg_end) / 2
+            active = next((t for s, e, t in local_cues if s <= local_mid + 0.01 and local_mid - 0.01 < e), None)
 
             if active:
                 out_path = os.path.join(frames_dir, f"frame_{frame_idx:05d}.png")
