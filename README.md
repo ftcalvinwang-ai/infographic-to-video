@@ -35,11 +35,13 @@ Then use it by typing `/info-to-video` in Claude Code.
 - Python 3.9+ with `edge-tts` and `Pillow`
 - Node.js (for Playwright screenshots)
 - ffmpeg
+- For YouTube input: `youtube-transcript-api`, `yt-dlp`, and optionally `openai-whisper`
 
 ### Install dependencies
 
 ```bash
-pip3 install edge-tts Pillow
+pip3 install edge-tts Pillow youtube-transcript-api yt-dlp
+pip3 install openai-whisper  # optional, for YouTube videos without subtitles
 brew install ffmpeg  # macOS
 ```
 
@@ -119,6 +121,7 @@ Subtitles are burned into images (not via ffmpeg's `subtitles` filter) so it wor
 ```
 SKILL.md              — Skill definition (workflow for Claude Code)
 generate-video.py     — Video generation pipeline (~400 lines)
+extract-youtube.py    — YouTube transcript extraction (subtitles + whisper fallback)
 README.md             — This file
 ```
 

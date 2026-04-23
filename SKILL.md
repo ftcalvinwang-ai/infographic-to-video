@@ -20,12 +20,18 @@ Options:
 - **Infographic image** — "I have an infographic image to share"
 - **Article / text** — "I have an article, blog post, or text content"
 - **Video script** — "I already have a written video script / narration"
+- **YouTube link** — "I have a YouTube video URL"
 
 Then based on their choice:
 
 - **Infographic:** Ask the user to share the image. Use the Read tool to view it.
 - **Article / text:** Ask the user to share the text (paste it, or provide a file path / URL). If a URL, use WebFetch to retrieve it. If a file path, use Read.
 - **Video script:** Ask the user to share the script. This can go almost directly to narration (Phase 2 step 3), but still needs slide structure design.
+- **YouTube link:** Ask the user to paste the YouTube URL. Then run the extraction script:
+  ```bash
+  python3 ~/.claude/skills/info-to-video/extract-youtube.py "<url>" -o /tmp/yt_transcript.json
+  ```
+  Read the output JSON. If extraction fails (no subtitles and no whisper), ask the user if they want to try with whisper (`--whisper-model base`). Present the video title and a summary of the extracted transcript to the user for confirmation before proceeding.
 
 ### Phase 2: Read & Script
 
@@ -38,6 +44,16 @@ Then based on their choice:
 #### If Article / Text:
 1. **Analyze the article** — Identify the core thesis, key arguments, supporting data, and conclusion. Understand the logical flow.
 2. **Design slide structure** — Break the article into 8-12 slide-sized chunks. Each slide should cover ONE key idea. Don't try to include everything — distill the most important and interesting points. Create a compelling narrative arc: hook → context → key points → conclusion.
+
+#### If YouTube Link:
+1. **Read the transcript** — The extracted transcript is raw speech (auto-captions or whisper output). It will contain filler words, repetition, incomplete sentences, and no structure. Clean it up mentally before designing slides.
+2. **Design slide structure** — Identify the core topics and key points from the transcript. Break into 8-12 slides. Ignore tangents, repetition, and filler. Focus on the most valuable and teachable content. Use the video title and description for additional context about the topic.
+
+**YouTube-specific narration rules:**
+- The transcript is a starting point, NOT the final narration. Rewrite it completely.
+- Distill a 10-minute rambling video into a tight 3-4 minute narrated slide deck.
+- Reorganize the content logically — the original video may jump around.
+- Keep the speaker's key insights but express them more clearly and concisely.
 
 #### If Video Script:
 1. **Analyze the script** — Read the full script. Identify natural section breaks and key topics.
