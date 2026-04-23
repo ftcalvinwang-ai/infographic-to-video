@@ -33,6 +33,19 @@ Then based on their choice:
   ```
   Read the output JSON. If extraction fails (no subtitles and no whisper), ask the user if they want to try with whisper (`--whisper-model base`). Present the video title and a summary of the extracted transcript to the user for confirmation before proceeding.
 
+### Phase 1.5: Choose Output Type
+
+After receiving the user's input, ask using AskUserQuestion:
+
+**Question** (header: "Output"):
+What would you like me to generate?
+
+Options:
+- **Full video (Recommended)** — Complete MP4 with voiceover, slides, and subtitles
+- **Assets only** — HTML slides + voiceover MP3 + SRT subtitle file (for you to edit yourself)
+
+Remember the user's choice. It determines whether Phase 7 produces a video or just assets.
+
 ### Phase 2: Read & Script
 
 **Step 1 & 2 depend on input type:**
@@ -155,7 +168,9 @@ Create a `script.json` file alongside the HTML:
 
 Save to the same directory as the HTML file.
 
-### Phase 7: Generate Video
+### Phase 7: Generate Output
+
+#### If Full Video:
 
 Run the video generation script:
 
@@ -172,13 +187,35 @@ This will:
 4. Concatenate audio with padding
 5. Assemble final MP4 with burned-in subtitles
 
+#### If Assets Only:
+
+Run with the `--assets-only` flag:
+
+```bash
+python3 ~/.claude/skills/info-to-video/generate-video.py \
+  <path-to-html> <path-to-script.json> \
+  --assets-only
+```
+
+This will generate TTS + merge audio/subtitles, then save to the output directory:
+- `voiceover.mp3` — complete voiceover with padding between slides
+- `subtitles.srt` — merged subtitle file with proper timing
+- (HTML and script.json are already in the directory)
+
+No screenshots or video assembly — much faster.
+
 ### Phase 8: Delivery
 
+#### If Full Video:
 1. Open the video: `open <output>.mp4`
+2. Tell the user: file location, size, duration, slide count
+
+#### If Assets Only:
+1. Open the HTML: `open <presentation>.html`
 2. Tell the user:
-   - File location and size
-   - Video duration and slide count
-   - How to customize: re-run with `--padding`, `--font-size`, `--no-subtitles` flags
+   - List all generated files and what each is for
+   - How to play: open HTML in browser, play MP3 alongside
+   - They can use these assets in any video editor (Premiere, Final Cut, CapCut, etc.)
 
 ## Error Handling
 

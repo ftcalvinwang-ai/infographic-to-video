@@ -6,7 +6,7 @@ Usage:
 
 Requires: edge-tts, ffmpeg, node+playwright (npx)
 """
-import argparse, json, os, re, shutil, subprocess, sys, tempfile, textwrap
+import argparse, json, os, re, shutil, subprocess, sys, tempfile, textwrap, time
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -39,9 +39,9 @@ def get_duration(audio_path):
     return float(out)
 
 # ── Step 1: TTS ──────────────────────────────────────────────
-def generate_tts(slides, voice, tmp_dir):
+def generate_tts(slides, voice, tmp_dir, speed=1.0):
     """Generate MP3 + SRT for each slide narration."""
-    info("Generating TTS audio...")
+    info(f"Generating TTS audio...{f' (speed: {speed}x)' if speed != 1.0 else ''}")
     results = []
     for i, slide in enumerate(slides):
         narration = slide.get("narration", "").strip()
@@ -50,22 +50,45 @@ def generate_tts(slides, voice, tmp_dir):
         srt = prefix + ".srt"
 
         if not narration:
-            # Generate silence for slides with no narration
             run(f'ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 "{mp3}"')
             duration = 2.0
-            # Empty SRT
             Path(srt).write_text("")
         else:
-            # Write narration to file to avoid shell escaping issues
             txt_file = prefix + ".txt"
             Path(txt_file).write_text(narration, encoding="utf-8")
-            cmd = f'python3 -m edge_tts --voice "{voice}" -f "{txt_file}" --write-media "{mp3}" --write-subtitles "{srt}"'
-            run(cmd)
+            raw_mp3 = prefix + "_raw.mp3" if speed != 1.0 else mp3
+            cmd = f'python3 -m edge_tts --voice "{voice}" -f "{txt_file}" --write-media "{raw_mp3}" --write-subtitles "{srt}"'
+            # Retry up to 3 times (edge-tts can fail transiently)
+            for attempt in range(3):
+                r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if r.returncode == 0:
+                    break
+                if attempt < 2:
+                    time.sleep(2)
+            else:
+                err(f"TTS failed for slide {i+1} after 3 attempts:\n{r.stderr.strip()}")
+                sys.exit(1)
+            # Speed up audio with ffmpeg atempo if needed
+            if speed != 1.0:
+                run(f'ffmpeg -y -i "{raw_mp3}" -filter:a "atempo={speed}" "{mp3}"')
+                # Adjust SRT timestamps by speed factor
+                _adjust_srt_speed(srt, speed)
             duration = get_duration(mp3)
 
         results.append({"mp3": mp3, "srt": srt, "duration": duration})
         ok(f"  Slide {i+1}: {duration:.1f}s")
     return results
+
+def _adjust_srt_speed(srt_path, speed):
+    """Adjust SRT timestamps by dividing all times by speed factor."""
+    content = Path(srt_path).read_text(encoding="utf-8")
+    pattern = re.compile(r'(\d{2}:\d{2}:\d{2}[.,]\d{3})')
+    def adjust(m):
+        t = ts_to_sec(m.group(1))
+        t /= speed
+        return sec_to_srt_ts(t)
+    content = pattern.sub(adjust, content)
+    Path(srt_path).write_text(content, encoding="utf-8")
 
 # ── Step 2: Screenshots ─────────────────────────────────────
 CAPTURE_SCRIPT = r"""
@@ -398,6 +421,8 @@ def main():
     parser.add_argument("--font-size", type=int, default=22, help="Subtitle font size (default: 22)")
     parser.add_argument("--resolution", default="1920x1080", help="Video resolution (default: 1920x1080)")
     parser.add_argument("--no-subtitles", action="store_true", help="Skip subtitle burn-in")
+    parser.add_argument("--speed", type=float, default=1.0, help="TTS speech speed multiplier (default: 1.0, e.g. 1.5 for 1.5x)")
+    parser.add_argument("--assets-only", action="store_true", help="Only generate voiceover MP3 + SRT, skip video assembly")
     args = parser.parse_args()
 
     # Validate inputs
@@ -430,38 +455,63 @@ def main():
     tmp_dir = tempfile.mkdtemp(prefix="infographic_video_")
     try:
         # Step 1: TTS
-        tts_results = generate_tts(slides, voice, tmp_dir)
+        tts_results = generate_tts(slides, voice, tmp_dir, args.speed)
 
-        # Step 2: Screenshots
-        pngs = capture_slides(html_path, tmp_dir, args.resolution)
-
-        slide_count = min(len(pngs), len(tts_results))
-        if len(pngs) != len(tts_results):
-            info(f"  Warning: {len(pngs)} slides captured, {len(tts_results)} narrations. Using first {slide_count}.")
-        pngs = pngs[:slide_count]
-        tts_results = tts_results[:slide_count]
-
-        # Step 3: Audio
+        # Step 2: Audio concatenation
         combined_audio = concat_audio(tts_results, args.padding, tmp_dir)
 
-        # Step 4: Subtitle frames (Pillow-based burn-in)
-        concat_entries = build_subtitle_frames(
-            pngs, tts_results, args.padding, tmp_dir,
-            args.font_size, args.no_subtitles)
+        # Step 3: Merge subtitles
+        info("Merging subtitles...")
+        srt_content = merge_subtitles(tts_results, args.padding)
+        ok("  Subtitles merged")
 
-        # Step 5: Assemble
-        assemble_video(concat_entries, combined_audio, output, tmp_dir)
+        if args.assets_only:
+            # Assets-only mode: copy MP3 + SRT to output directory
+            out_dir = str(Path(html_path).parent)
+            mp3_out = os.path.join(out_dir, "voiceover.mp3")
+            srt_out = os.path.join(out_dir, "subtitles.srt")
+            shutil.copy2(combined_audio, mp3_out)
+            Path(srt_out).write_text(srt_content, encoding="utf-8")
 
-        print()
-        print("\033[1m════════════════════════════════════════\033[0m")
-        ok("Video generated successfully!")
-        size = os.path.getsize(output) / (1024*1024)
-        print(f"  File: {output}")
-        print(f"  Size: {size:.1f} MB")
-        total = sum(r['duration'] for r in tts_results) + args.padding * (slide_count - 1)
-        print(f"  Duration: {total:.0f}s ({slide_count} slides)")
-        print("\033[1m════════════════════════════════════════\033[0m")
-        print()
+            total = sum(r['duration'] for r in tts_results) + args.padding * (len(tts_results) - 1)
+            print()
+            print("\033[1m════════════════════════════════════════\033[0m")
+            ok("Assets generated successfully!")
+            print(f"  Voiceover: {mp3_out}")
+            print(f"  Subtitles: {srt_out}")
+            print(f"  HTML:      {html_path}")
+            print(f"  Duration:  {total:.0f}s ({len(tts_results)} slides)")
+            print("\033[1m════════════════════════════════════════\033[0m")
+            print()
+        else:
+            # Full video mode
+            # Step 4: Screenshots
+            pngs = capture_slides(html_path, tmp_dir, args.resolution)
+
+            slide_count = min(len(pngs), len(tts_results))
+            if len(pngs) != len(tts_results):
+                info(f"  Warning: {len(pngs)} slides captured, {len(tts_results)} narrations. Using first {slide_count}.")
+            pngs = pngs[:slide_count]
+            tts_results = tts_results[:slide_count]
+
+            # Step 5: Subtitle frames (Pillow-based burn-in)
+            concat_entries = build_subtitle_frames(
+                pngs, tts_results, args.padding, tmp_dir,
+                args.font_size, args.no_subtitles)
+
+            # Step 6: Assemble
+            assemble_video(concat_entries, combined_audio, output, tmp_dir)
+
+            print()
+            print("\033[1m════════════════════════════════════════\033[0m")
+            ok("Video generated successfully!")
+            size = os.path.getsize(output) / (1024*1024)
+            print(f"  File: {output}")
+            print(f"  Size: {size:.1f} MB")
+            total = sum(r['duration'] for r in tts_results) + args.padding * (len(tts_results) - 1)
+            print(f"  Duration: {total:.0f}s ({len(tts_results)} slides)")
+            print("\033[1m════════════════════════════════════════\033[0m")
+            print()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
