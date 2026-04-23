@@ -1,12 +1,12 @@
 # Infographic to Video
 
-A Claude Code skill that converts infographic images into narrated MP4 videos with AI voiceover and burned-in subtitles.
+A Claude Code skill that converts **infographics, articles, or video scripts** into narrated MP4 videos with AI voiceover and burned-in subtitles.
 
 ## What This Does
 
-You give Claude an infographic image, and it automatically:
+You give Claude an infographic image, an article, or a video script, and it automatically:
 
-1. **Reads the infographic** — extracts all content, data, and structure
+1. **Reads your input** — extracts content from images, text, or URLs
 2. **Writes a narration script** — conversational, educational voiceover (not just reading the text)
 3. **Generates HTML slides** — using [frontend-slides](https://github.com/zarazhangrui/frontend-slides) for stunning visuals
 4. **Produces AI voiceover** — via Edge TTS (free, no API key needed)

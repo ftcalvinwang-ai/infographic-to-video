@@ -1,26 +1,50 @@
 ---
 name: infographic-to-video
-description: Convert an infographic image into a narrated video with AI voiceover and subtitles. Orchestrates the full pipeline — read image, write narration, generate HTML slides (via frontend-slides), then produce MP4 with Edge TTS voiceover and burned-in subtitles.
+description: Convert an infographic, article, or video script into a narrated video with AI voiceover and subtitles. Orchestrates the full pipeline — read input, write narration, generate HTML slides (via frontend-slides), then produce MP4 with Edge TTS voiceover and burned-in subtitles.
 ---
 
 # Infographic to Video
 
-Convert infographic images into narrated MP4 videos with AI voiceover and subtitles.
+Convert infographics, articles, or video scripts into narrated MP4 videos with AI voiceover and subtitles.
 
 ## Workflow
 
-### Phase 1: Collect Infographic
+### Phase 1: Collect Input
 
-Ask the user to share their infographic image:
+Ask the user what kind of input they have, using AskUserQuestion:
 
-> "Please share the infographic image you'd like to turn into a video."
+**Question** (header: "Input Type"):
+What would you like to turn into a video?
 
-Wait for the user to provide the image. Use the Read tool to view it once provided.
+Options:
+- **Infographic image** — "I have an infographic image to share"
+- **Article / text** — "I have an article, blog post, or text content"
+- **Video script** — "I already have a written video script / narration"
+
+Then based on their choice:
+
+- **Infographic:** Ask the user to share the image. Use the Read tool to view it.
+- **Article / text:** Ask the user to share the text (paste it, or provide a file path / URL). If a URL, use WebFetch to retrieve it. If a file path, use Read.
+- **Video script:** Ask the user to share the script. This can go almost directly to narration (Phase 2 step 3), but still needs slide structure design.
 
 ### Phase 2: Read & Script
 
+**Step 1 & 2 depend on input type:**
+
+#### If Infographic:
 1. **Read the infographic** — Extract ALL text, data, structure, and visual flow from the image.
 2. **Design slide structure** — Map the infographic sections to slides (typically 8-12 slides). Follow the same content structure as the original infographic.
+
+#### If Article / Text:
+1. **Analyze the article** — Identify the core thesis, key arguments, supporting data, and conclusion. Understand the logical flow.
+2. **Design slide structure** — Break the article into 8-12 slide-sized chunks. Each slide should cover ONE key idea. Don't try to include everything — distill the most important and interesting points. Create a compelling narrative arc: hook → context → key points → conclusion.
+
+#### If Video Script:
+1. **Analyze the script** — Read the full script. Identify natural section breaks and key topics.
+2. **Design slide structure** — Split the script into slides (one topic per slide). Each slide's narration should be 15-25 seconds of speech. If the user's script is too long for one slide, split it; if too short, combine sections.
+
+**Step 3 (all input types):**
+
 3. **Write narration script** — This is the most important step. Follow these rules:
 
 **Narration Writing Rules (CRITICAL):**
