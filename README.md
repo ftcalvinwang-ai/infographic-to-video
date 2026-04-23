@@ -24,10 +24,10 @@ Output: a 4-minute narrated video with slides, voiceover, and subtitles
 ## Installation
 
 ```bash
-git clone https://github.com/ftcalvinwang-ai/infographic-to-video.git ~/.claude/skills/infographic-to-video
+git clone https://github.com/ftcalvinwang-ai/info-to-video.git ~/.claude/skills/info-to-video
 ```
 
-Then use it by typing `/infographic-to-video` in Claude Code.
+Then use it by typing `/info-to-video` in Claude Code.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ Playwright is installed automatically on first run (via npm in a temp directory)
 ### Via Claude Code (Recommended)
 
 ```
-/infographic-to-video
+/info-to-video
 ```
 
 Then follow the prompts — share your infographic, confirm the script, choose a voice, and get your video.

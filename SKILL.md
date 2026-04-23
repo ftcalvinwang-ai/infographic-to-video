@@ -1,5 +1,5 @@
 ---
-name: infographic-to-video
+name: info-to-video
 description: Convert an infographic, article, or video script into a narrated video with AI voiceover and subtitles. Orchestrates the full pipeline — read input, write narration, generate HTML slides (via frontend-slides), then produce MP4 with Edge TTS voiceover and burned-in subtitles.
 ---
 
@@ -144,7 +144,7 @@ Save to the same directory as the HTML file.
 Run the video generation script:
 
 ```bash
-python3 ~/.claude/skills/infographic-to-video/generate-video.py \
+python3 ~/.claude/skills/info-to-video/generate-video.py \
   <path-to-html> <path-to-script.json> \
   -o <output-path>.mp4
 ```
