@@ -170,6 +170,85 @@ def capture_slides(html_path, tmp_dir, resolution="1920x1080"):
     pngs = sorted(Path(shot_dir).glob("slide_*.png"))
     return [str(p) for p in pngs]
 
+# ── Step 2b: Generate slide images with Pillow (no HTML) ────
+def generate_slide_images(slides, tmp_dir, resolution="1920x1080"):
+    """Generate slide images directly using Pillow, no HTML/Playwright needed."""
+    info("Generating slide images (Pillow)...")
+    w, h = [int(x) for x in resolution.split("x")]
+    shot_dir = os.path.join(tmp_dir, "screenshots")
+    os.makedirs(shot_dir, exist_ok=True)
+
+    # Colors (Bloomberg terminal style)
+    bg_color = (0, 0, 0)
+    panel_color = (26, 26, 26)
+    orange = (255, 102, 0)
+    amber = (255, 153, 0)
+    white = (255, 255, 255)
+    dim = (102, 102, 102)
+    border = (51, 51, 51)
+
+    # Fonts
+    title_size = max(36, int(h * 0.055))
+    tag_size = max(18, int(h * 0.022))
+    point_size = max(22, int(h * 0.028))
+    quote_size = max(20, int(h * 0.025))
+
+    title_font = get_font(title_size)
+    tag_font = get_font(tag_size)
+    point_font = get_font(point_size)
+    quote_font = get_font(quote_size)
+
+    pngs = []
+    for i, slide in enumerate(slides):
+        img = Image.new("RGB", (w, h), bg_color)
+        draw = ImageDraw.Draw(img)
+
+        # Draw grid lines
+        for gx in range(0, w, 40):
+            draw.line([(gx, 0), (gx, h)], fill=(255, 153, 0, 5), width=1)
+        for gy in range(0, h, 40):
+            draw.line([(0, gy), (w, gy)], fill=(255, 153, 0, 5), width=1)
+
+        # Header bar
+        header_h = max(28, int(h * 0.035))
+        draw.rectangle([0, 0, w, header_h], fill=orange)
+        tag_text = slide.get("tag", f"SLIDE {i+1}")
+        draw.text((int(w * 0.02), (header_h - tag_size) // 2), tag_text, font=tag_font, fill=(0, 0, 0))
+
+        # Content area
+        margin_x = int(w * 0.08)
+        content_y = int(h * 0.2)
+
+        # Title
+        title = slide.get("title", "")
+        if title:
+            draw.text((margin_x, content_y), title, font=title_font, fill=white)
+            content_y += title_size + int(h * 0.04)
+
+        # Points
+        points = slide.get("points", [])
+        for pt in points:
+            # Orange arrow
+            draw.text((margin_x, content_y), ">", font=point_font, fill=orange)
+            draw.text((margin_x + int(w * 0.025), content_y), pt, font=point_font, fill=white)
+            content_y += point_size + int(h * 0.018)
+
+        # Quote
+        quote = slide.get("quote", "")
+        if quote:
+            content_y += int(h * 0.02)
+            draw.text((margin_x, content_y), f'"{quote}"', font=quote_font, fill=amber)
+
+        # Bottom border
+        draw.line([(0, h - 1), (w, h - 1)], fill=border, width=1)
+
+        path = os.path.join(shot_dir, f"slide_{i+1:03d}.png")
+        img.save(path, "PNG")
+        pngs.append(path)
+
+    ok(f"  Generated {len(pngs)} slide images")
+    return pngs
+
 # ── Step 3: Subtitle merging ────────────────────────────────
 def parse_vtt_to_cues(srt_path):
     """Parse edge-tts generated VTT/SRT into list of (start_sec, end_sec, text)."""
@@ -416,7 +495,7 @@ def assemble_video(concat_entries, combined_audio, output, tmp_dir):
 # ── Main ─────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Convert HTML slides + narration to MP4 video")
-    parser.add_argument("html", help="Path to HTML presentation")
+    parser.add_argument("html", nargs="?", help="Path to HTML presentation (not needed with --simple)")
     parser.add_argument("script", help="Path to narration JSON")
     parser.add_argument("-o", "--output", help="Output MP4 path")
     parser.add_argument("--padding", type=float, default=1.5, help="Seconds of silence between slides (default: 1.5)")
@@ -425,12 +504,17 @@ def main():
     parser.add_argument("--no-subtitles", action="store_true", help="Skip subtitle burn-in")
     parser.add_argument("--speed", type=float, default=1.0, help="TTS speech speed multiplier (default: 1.0, e.g. 1.5 for 1.5x)")
     parser.add_argument("--assets-only", action="store_true", help="Only generate voiceover MP3 + SRT, skip video assembly")
+    parser.add_argument("--simple", action="store_true", help="Generate slides with Pillow instead of HTML+Playwright (faster, no dependencies)")
     args = parser.parse_args()
 
     # Validate inputs
-    html_path = str(Path(args.html).resolve())
-    if not os.path.isfile(html_path):
-        err(f"HTML file not found: {html_path}"); sys.exit(1)
+    html_path = None
+    if args.html:
+        html_path = str(Path(args.html).resolve())
+        if not os.path.isfile(html_path):
+            err(f"HTML file not found: {html_path}"); sys.exit(1)
+    elif not args.simple:
+        err("HTML path required (or use --simple to skip HTML)"); sys.exit(1)
 
     script_path = str(Path(args.script).resolve())
     if not os.path.isfile(script_path):
@@ -444,7 +528,8 @@ def main():
     if not slides:
         err("No slides in script JSON"); sys.exit(1)
 
-    output = args.output or str(Path(html_path).with_suffix("")) + "_video.mp4"
+    base_path = html_path if html_path else script_path
+    output = args.output or str(Path(base_path).with_suffix("")) + "_video.mp4"
     output = str(Path(output).resolve())
 
     print()
@@ -469,7 +554,7 @@ def main():
 
         if args.assets_only:
             # Assets-only mode: copy MP3 + SRT to output directory
-            out_dir = str(Path(html_path).parent)
+            out_dir = str(Path(base_path).parent)
             mp3_out = os.path.join(out_dir, "voiceover.mp3")
             srt_out = os.path.join(out_dir, "subtitles.srt")
             shutil.copy2(combined_audio, mp3_out)
@@ -481,14 +566,18 @@ def main():
             ok("Assets generated successfully!")
             print(f"  Voiceover: {mp3_out}")
             print(f"  Subtitles: {srt_out}")
-            print(f"  HTML:      {html_path}")
+            if html_path:
+                print(f"  HTML:      {html_path}")
             print(f"  Duration:  {total:.0f}s ({len(tts_results)} slides)")
             print("\033[1m════════════════════════════════════════\033[0m")
             print()
         else:
             # Full video mode
-            # Step 4: Screenshots
-            pngs = capture_slides(html_path, tmp_dir, args.resolution)
+            # Step 4: Generate slide images
+            if args.simple:
+                pngs = generate_slide_images(slides, tmp_dir, args.resolution)
+            else:
+                pngs = capture_slides(html_path, tmp_dir, args.resolution)
 
             slide_count = min(len(pngs), len(tts_results))
             if len(pngs) != len(tts_results):

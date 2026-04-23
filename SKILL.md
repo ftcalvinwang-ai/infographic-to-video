@@ -41,10 +41,29 @@ After receiving the user's input, ask using AskUserQuestion:
 What would you like me to generate?
 
 Options:
-- **Full video (Recommended)** — Complete MP4 with voiceover, slides, and subtitles
+- **Full video with HTML slides (Recommended)** — Generate HTML slides (frontend-slides) + MP4 with voiceover and subtitles
+- **Full video, simple mode** — Generate video directly from script (Pillow text cards, no HTML needed, much faster)
 - **Assets only** — HTML slides + voiceover MP3 + SRT subtitle file (for you to edit yourself)
 
-Remember the user's choice. It determines whether Phase 7 produces a video or just assets.
+Remember the user's choice. It determines:
+- **Full video with HTML slides**: Phase 5 generates HTML, Phase 7 uses Playwright screenshots
+- **Full video, simple mode**: Skip Phase 5 (no HTML), Phase 6 script.json must include `title`, `tag`, `points`, `quote` fields per slide, Phase 7 uses `--simple` flag
+- **Assets only**: Phase 7 uses `--assets-only` flag
+
+**Simple mode script.json format** (each slide needs visual content fields):
+```json
+{
+  "slides": [
+    {
+      "narration": "voiceover text...",
+      "tag": "EDGE #1",
+      "title": "Time Decay",
+      "points": ["Every option loses value daily", "Seller: paycheck"],
+      "quote": "You make money while you sleep."
+    }
+  ]
+}
+```
 
 ### Phase 2: Read & Script
 
