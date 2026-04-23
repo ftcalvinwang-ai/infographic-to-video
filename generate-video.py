@@ -203,12 +203,6 @@ def generate_slide_images(slides, tmp_dir, resolution="1920x1080"):
         img = Image.new("RGB", (w, h), bg_color)
         draw = ImageDraw.Draw(img)
 
-        # Draw grid lines
-        for gx in range(0, w, 40):
-            draw.line([(gx, 0), (gx, h)], fill=(255, 153, 0, 5), width=1)
-        for gy in range(0, h, 40):
-            draw.line([(0, gy), (w, gy)], fill=(255, 153, 0, 5), width=1)
-
         # Header bar
         header_h = max(28, int(h * 0.035))
         draw.rectangle([0, 0, w, header_h], fill=orange)
